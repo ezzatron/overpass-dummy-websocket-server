@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "dependencies": {
+    "babel-preset-latest-minimal": "^1.1.2",
+    "babel-register": "^6.16.3",
+    "winston": "^2.2.0",
+    "ws": "^1.1.1"
+  }
+}
