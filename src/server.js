@@ -1,174 +1,249 @@
-import Problem from './problem'
+import Failure from './failure'
 
 export default class Server {
   constructor ({port, WsServer, services, logger}) {
-    this.port = port
-    this.WsServer = WsServer
-    this.services = services
-    this.logger = logger
+    this._port = port
+    this._WsServer = WsServer
+    this._services = services
+    this._logger = logger
 
-    this.seq = 0
+    this._socketSeq = 0
   }
 
   async start () {
     const serviceStarts = []
 
-    for (let namespace in this.services) {
-      serviceStarts.push(this.services[namespace].start())
+    for (let namespace in this._services) {
+      serviceStarts.push(this._services[namespace].start())
     }
 
     await Promise.all(serviceStarts)
 
-    const server = new this.WsServer({port: this.port})
-    this.logger.info('Listening on port %d.', this.port)
-    server.on('connection', this.onConnection())
+    const server = new this._WsServer({port: this._port})
+    this._logger.info('Listening on port %d.', this._port)
+    server.on('connection', this._onConnection())
   }
 
-  onConnection () {
-    const server = this
+  _onConnection () {
+    return socket => {
+      const seq = this._socketSeq++
 
-    return connection => {
-      const seq = server.seq++
+      socket.once('message', this._onFirstMessage({socket, seq}))
+      socket.once('close', this._onClose({seq}))
 
-      connection.once('message', server.onFirstMessage({connection, seq}))
-      connection.once('close', server.onClose({seq}))
-
-      server.logger.info('Connection %d opened.', seq)
+      this._logger.info('[%d] Socket opened.', seq)
     }
   }
 
-  onFirstMessage ({connection, seq}) {
-    const server = this
-
+  _onFirstMessage ({socket, seq}) {
     return message => {
-      server.logger.info('[recv] [%d] %s', seq, message)
+      this._logger.info('[%d] [hand] [recv] %s', seq, message)
 
-      const handler = server.onMessage({connection, seq})
+      const handler = this._onMessage({socket, seq})
 
-      connection.on('message', handler)
-      connection.once(
+      socket.on('message', handler)
+      socket.once(
         'close',
-        () => connection.removeListener('message', handler)
+        () => socket.removeListener('message', handler)
       )
 
-      server.logger.info('[send] [%d] OP0200', seq)
-      connection.send('OP0200')
+      this._logger.info('[%d] [hand] [send] OP0200', seq)
+      socket.send('OP0200')
     }
   }
 
-  onMessage ({connection, seq}) {
-    const server = this
-
+  _onMessage ({socket, seq}) {
     return message => {
-      server.logger.info('[recv] [%d] %d', seq, message)
-
       try {
         const request = JSON.parse(message)
-        server.dispatch({connection, seq, request})
+
+        if (request.seq) {
+          this._logger.info(
+            '[%d] [%d] [%d] [recv] %s',
+            seq,
+            request.session,
+            request.seq,
+            message
+          )
+        } else {
+          this._logger.info(
+            '[%d] [%d] [recv] %s',
+            seq,
+            request.session,
+            message
+          )
+        }
+
+        this._dispatch({socket, seq, request})
       } catch (e) {
-        server.logger.error(
-          '[%d] Invalid message encoding: %s',
+        this._logger.info('[%d] [recv] %s', seq, message)
+        this._logger.error(
+          '[%d] [err] Invalid message encoding: %s',
           seq,
           e.message
         )
-        connection.close()
+        socket.close()
       }
     }
   }
 
-  async dispatch ({connection, seq, request}) {
+  async _dispatch ({socket, seq, request}) {
     if (request.type !== 'command.request') return
 
-    const service = this.services[request.namespace]
+    const service = this._services[request.namespace]
 
     if (!service) {
-      const message = "Undefined namespace '" + request.namespace + "'."
-      const problem = new Problem({
-        user: {type: 'op-undefined-command', message},
-        real: message,
-        data: {services: Object.keys(this.services)}
+      return this._respondWithError({
+        socket,
+        seq,
+        request,
+        error: new Error("Undefined namespace '" + request.namespace + "'.")
       })
-
-      this.respondWithProblem({connection, seq, request, problem})
-
-      return
     }
 
     const command = service.commands[request.command]
 
-
     if (!command) {
-      const message = "Undefined command '" + request.command +
-        "' for namespace '" + request.namespace + "'."
-      const problem = new Problem({
-        user: {type: 'op-undefined-command', message},
-        real: message,
-        data: {commands: Object.keys(service.commands)}
+      return this._respondWithError({
+        socket,
+        seq,
+        request,
+        error: new Error(
+          "Undefined command '" + request.command +
+          "' for namespace '" + request.namespace + "'."
+        )
       })
-
-      this.respondWithProblem({connection, seq, request, problem})
-
-      return
     }
 
-    const respond = this.createRespond({connection, seq, request})
+    const respond = this._createRespond({socket, seq, request})
 
     try {
       const response = await command({respond, request: request.payload})
       if (response) respond(response)
     } catch (error) {
-      let problem
-
-      if (error instanceof Problem) {
-        problem = error
+      if (error instanceof Failure) {
+        this._respondWithFailure({socket, seq, request, failure: error})
       } else {
-        problem = new Problem({
-          user: 'A server error occurred.',
-          real: error.message,
-          data: {error}
-        })
+        this._respondWithError({socket, seq, request, error})
       }
-
-      this.respondWithProblem({connection, seq, request, problem})
     }
   }
 
-  createRespond ({connection, seq, request}) {
-    const server = this
+  _createRespond ({socket, seq, request}) {
+    if (!request.seq) {
+      return payload => {
+        return this._logger.warn(
+          '[%d] [%d] [succ] [unsent]',
+          seq,
+          request.session,
+          payload
+        )
+      }
+    }
 
     return payload => {
-      const message = {
+      this._logger.info(
+        '[%d] [%d] [%d] [succ]',
+        seq,
+        request.session,
+        request.seq,
+        payload
+      )
+
+      this._send({
+        socket,
+        seq,
+        request,
+        message: {
+          type: 'command.response',
+          responseType: 'success',
+          session: request.session,
+          seq: request.seq,
+          payload: payload
+        }
+      })
+    }
+  }
+
+  _respondWithFailure ({socket, seq, request, failure}) {
+    if (!request.seq) {
+      return this._logger.warn(
+        '[%d] [%d] [fail] [unsent] %s',
+        seq,
+        request.session,
+        failure.real,
+        failure.data
+      )
+    }
+
+    this._logger.info(
+      '[%d] [%d] [%d] [fail] %s',
+      seq,
+      request.session,
+      request.seq,
+      failure.real,
+      failure.data
+    )
+
+    this._send({
+      socket,
+      seq,
+      request,
+      message: {
         type: 'command.response',
+        responseType: 'failure',
         session: request.session,
         seq: request.seq,
-        payload: payload
+        payload: failure.user
       }
-      const json = JSON.stringify(message)
-
-      server.logger.info('[send] [%d] %s', seq, json)
-      connection.send(json)
-    }
+    })
   }
 
-  respondWithProblem ({connection, seq, request, problem}) {
-    this.logger.error('[%d] %s', seq, problem.real, problem.data)
-
-    const message = {
-      type: 'command.response',
-      session: request.session,
-      seq: request.seq,
-      payload: problem.user,
-      error: true
+  _respondWithError ({socket, seq, request, error}) {
+    if (!request.seq) {
+      return this._logger.error(
+        '[%d] [%d] [erro] [unsent] %s',
+        seq,
+        request.session,
+        error.message
+      )
     }
-    const json = JSON.stringify(message)
 
-    this.logger.info('[send] [%d] %s', seq, json)
-    connection.send(json)
+    this._logger.error(
+      '[%d] [%d] [%d] [erro] %s',
+      seq,
+      request.session,
+      request.seq,
+      error.message
+    )
+
+    this._send({
+      socket,
+      seq,
+      request,
+      message: {
+        type: 'command.response',
+        responseType: 'error',
+        session: request.session,
+        seq: request.seq
+      }
+    })
   }
 
-  onClose ({seq}) {
-    const server = this
+  _send ({socket, seq, request, message}) {
+    const data = JSON.stringify(message)
 
-    return () => server.logger.info('Connection %d closed.', seq)
+    this._logger.info(
+      '[%d] [%d] [%d] [send] %s',
+      seq,
+      request.session,
+      request.seq,
+      data
+    )
+    socket.send(data)
+  }
+
+  _onClose ({seq}) {
+    return () => this._logger.info('[%d] Socket closed.', seq)
   }
 }

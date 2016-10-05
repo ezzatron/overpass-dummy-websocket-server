@@ -1,4 +1,4 @@
-export default class Problem extends Error {
+export default class Failure extends Error {
   constructor ({user, real, data}) {
     super(user)
 
