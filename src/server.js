@@ -11,7 +11,13 @@ export default class Server {
   }
 
   async start () {
-    await Promise.all(this.services.map(service => service.start()))
+    const serviceStarts = []
+
+    for (let namespace in this.services) {
+      serviceStarts.push(this.services[namespace].start())
+    }
+
+    await Promise.all(serviceStarts)
 
     const server = new this.WsServer({port: this.port})
     this.logger.info('Listening on port %d.', this.port)
@@ -73,9 +79,37 @@ export default class Server {
   async dispatch ({connection, seq, request}) {
     if (request.type !== 'command.request') return
 
-    const command = this.findCommand({command: request.command})
+    const service = this.services[request.namespace]
 
-    if (!command) return
+    if (!service) {
+      const message = "Undefined namespace '" + request.namespace + "'."
+      const problem = new Problem({
+        user: {type: 'op-undefined-command', message},
+        real: message,
+        data: {services: Object.keys(this.services)}
+      })
+
+      this.respondWithProblem({connection, seq, request, problem})
+
+      return
+    }
+
+    const command = service.commands[request.command]
+
+
+    if (!command) {
+      const message = "Undefined command '" + request.command +
+        "' for namespace '" + request.namespace + "'."
+      const problem = new Problem({
+        user: {type: 'op-undefined-command', message},
+        real: message,
+        data: {commands: Object.keys(service.commands)}
+      })
+
+      this.respondWithProblem({connection, seq, request, problem})
+
+      return
+    }
 
     const respond = this.createRespond({connection, seq, request})
 
@@ -96,18 +130,6 @@ export default class Server {
       }
 
       this.respondWithProblem({connection, seq, request, problem})
-    }
-  }
-
-  findCommand ({command}) {
-    for (let service in this.services) {
-      if (!command.startsWith(service.prefix)) continue
-
-      for (let serviceCommand in service.commands) {
-        if (service.prefix + '.' + serviceCommand === command) {
-          return service[command].bind(service)
-        }
-      }
     }
   }
 
