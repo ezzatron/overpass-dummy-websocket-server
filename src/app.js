@@ -9,7 +9,9 @@ if (!process.env.PORT) {
 }
 
 const logger = new winston.Logger({
-  transports: [new winston.transports.Console({timestamp: true})]
+  transports: [
+    new winston.transports.Console({handleExceptions: true, timestamp: true})
+  ]
 })
 const services = {
   'echo.1': new EchoService({logger})

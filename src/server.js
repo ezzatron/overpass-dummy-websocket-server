@@ -97,19 +97,12 @@ export default class Server {
 
     const service = this._services[request.namespace]
 
-    if (!service) {
-      return this._respondWithError({
-        socket,
-        seq,
-        request,
-        error: new Error("Undefined namespace '" + request.namespace + "'.")
-      })
-    }
+    if (!service) return // imitates Overpass limitation
 
     const command = service.commands[request.command]
 
     if (!command) {
-      return this._respondWithError({
+      this._respondWithError({
         socket,
         seq,
         request,
@@ -118,6 +111,8 @@ export default class Server {
           "' for namespace '" + request.namespace + "'."
         )
       })
+
+      return
     }
 
     const respond = this._createRespond({socket, seq, request})
