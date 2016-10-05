@@ -108,7 +108,7 @@ export default class Server {
         request,
         error: new Error(
           "Undefined command '" + request.command +
-          "' for namespace '" + request.namespace + "'."
+          "' in namespace '" + request.namespace + "'."
         )
       })
 
