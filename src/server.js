@@ -14,6 +14,7 @@ export default class Server {
     const serviceStarts = []
 
     for (let namespace in this._services) {
+      this._logger.info('Waiting for service %s to start.', namespace)
       serviceStarts.push(this._services[namespace].start())
     }
 
@@ -116,9 +117,12 @@ export default class Server {
     }
 
     const respond = this._createRespond({socket, seq, request})
+    const isResponseRequired = !!request.seq
 
     try {
-      const response = await command({respond, request: request.payload})
+      const response =
+        await command({respond, isResponseRequired, request: request.payload})
+
       if (response) respond(response)
     } catch (error) {
       if (error instanceof Failure) {
@@ -132,7 +136,7 @@ export default class Server {
   _createRespond ({socket, seq, request}) {
     if (!request.seq) {
       return payload => {
-        return this._logger.warn(
+        return this._logger.info(
           '[%d] [%d] [succ] [unsent]',
           seq,
           request.session,
@@ -167,7 +171,7 @@ export default class Server {
 
   _respondWithFailure ({socket, seq, request, failure}) {
     if (!request.seq) {
-      return this._logger.warn(
+      return this._logger.info(
         '[%d] [%d] [fail] [unsent] %s',
         seq,
         request.session,
