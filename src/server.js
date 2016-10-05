@@ -14,8 +14,12 @@ export default class Server {
     const serviceStarts = []
 
     for (let namespace in this._services) {
+      const service = this._services[namespace]
+
+      if (!service.start) continue
+
       this._logger.info('Waiting for service %s to start.', namespace)
-      serviceStarts.push(this._services[namespace].start())
+      serviceStarts.push(service.start())
     }
 
     await Promise.all(serviceStarts)

@@ -5,33 +5,18 @@ export default class EchoService {
     this._logger = logger
 
     this.commands = {
-      echo: this.echo.bind(this),
+      success: this.success.bind(this),
       fail: this.fail.bind(this),
-      error: this.error.bind(this)
+      error: this.error.bind(this),
+      timeout: this.timeout.bind(this)
     }
   }
 
-  async start () {
-    this._logger.info('[echo] Service starting.')
-
-    await new Promise((resolve, reject) => {
-      setTimeout(resolve, 3000)
-    })
-
-    this._logger.info('[echo] Service started.')
-  }
-
-  async echo ({request}) {
-    this._logger.info('[echo] Pausing for dramatic effect.')
-
-    await new Promise((resolve, reject) => {
-      setTimeout(resolve, 3000)
-    })
-
+  success ({request}) {
     return {echo: request}
   }
 
-  async fail ({request}) {
+  fail ({request}) {
     throw new Failure({
       type: 'echo-failure',
       user: 'You done goofed.',
@@ -40,7 +25,11 @@ export default class EchoService {
     })
   }
 
-  async error ({request}) {
+  error ({request}) {
     throw new Error('You done goofed.')
+  }
+
+  timeout ({request}) {
+    return
   }
 }
