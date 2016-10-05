@@ -172,19 +172,21 @@ export default class Server {
   _respondWithFailure ({socket, seq, request, failure}) {
     if (!request.seq) {
       return this._logger.info(
-        '[%d] [%d] [fail] [unsent] %s',
+        '[%d] [%d] [fail] [unsent] [%s] %s',
         seq,
         request.session,
+        failure.type,
         failure.real,
         failure.data
       )
     }
 
     this._logger.info(
-      '[%d] [%d] [%d] [fail] %s',
+      '[%d] [%d] [%d] [fail] [%s] %s',
       seq,
       request.session,
       request.seq,
+      failure.type,
       failure.real,
       failure.data
     )
@@ -196,6 +198,7 @@ export default class Server {
       message: {
         type: 'command.response',
         responseType: 'failure',
+        failureType: failure.type,
         session: request.session,
         seq: request.seq,
         payload: failure.user
@@ -237,7 +240,7 @@ export default class Server {
   _send ({socket, seq, request, message}) {
     const data = JSON.stringify(message)
 
-    this._logger.info(
+    this._logger.debug(
       '[%d] [%d] [%d] [send] %s',
       seq,
       request.session,
