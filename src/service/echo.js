@@ -19,9 +19,14 @@ export default class EchoService {
   fail ({request}) {
     throw new Failure({
       type: 'echo-failure',
-      user: 'You done goofed.',
-      real: 'Failure requested by client.',
-      data: {request}
+      user: {
+        message: 'You done goofed.',
+        data: {request}
+      },
+      real: {
+        message: 'Failure requested by client.',
+        data: {request}
+      }
     })
   }
 

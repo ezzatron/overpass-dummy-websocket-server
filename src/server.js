@@ -175,8 +175,8 @@ export default class Server {
         seq,
         request.session,
         failure.type,
-        failure.real,
-        failure.data
+        failure.real.message,
+        failure.real.data
       )
     }
 
@@ -186,8 +186,8 @@ export default class Server {
       request.session,
       request.seq,
       failure.type,
-      failure.real,
-      failure.data
+      failure.real.message,
+      failure.real.data
     )
 
     this._send({
@@ -201,8 +201,8 @@ export default class Server {
         seq: request.seq,
         payload: {
           type: failure.type,
-          message: failure.user,
-          data: failure.userData
+          message: failure.user.message,
+          data: failure.user.data
         }
       }
     })
