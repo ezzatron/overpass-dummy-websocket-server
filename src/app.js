@@ -10,7 +10,24 @@ if (!process.env.PORT) {
 
 const logger = new winston.Logger({
   transports: [
-    new winston.transports.Console({handleExceptions: true, timestamp: true})
+    new winston.transports.Console({
+      handleExceptions: true,
+      formatter: options => {
+        let meta
+
+        if (options.meta && Object.keys(options.meta).length) {
+          meta = ' ' + JSON.stringify(options.meta)
+        } else {
+          meta = ''
+        }
+
+        const time = new Date()
+
+        return time.toISOString() +
+          ' [' + options.level.substring(0, 4) + '] ' +
+          options.message + meta
+      }
+    })
   ]
 })
 const services = {
