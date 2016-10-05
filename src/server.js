@@ -197,10 +197,13 @@ export default class Server {
       message: {
         type: 'command.response',
         responseType: 'failure',
-        failureType: failure.type,
         session: request.session,
         seq: request.seq,
-        payload: failure.user
+        payload: {
+          type: failure.type,
+          message: failure.user,
+          data: failure.userData
+        }
       }
     })
   }
