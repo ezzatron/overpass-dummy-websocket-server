@@ -24,7 +24,7 @@ export default class Server {
 
     await Promise.all(serviceStarts)
 
-    const server = new this._WsServer({port: this._port})
+    const server = new this._WsServer({host: '0.0.0.0', port: this._port})
     this._logger.info('Listening on port %d.', this._port)
     server.on('connection', this._onConnection())
   }
