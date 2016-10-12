@@ -7,4 +7,4 @@ serve: node_modules
 .PHONY: lint serve
 
 node_modules:
-	npm install
+	yarn install
