@@ -1,4 +1,11 @@
+import {StringDecoder} from 'string_decoder'
+
 import Failure from './failure'
+
+const COMMAND_REQUEST = 'R'
+const COMMAND_RESPONSE_ERROR = 'E'
+const COMMAND_RESPONSE_FAILURE = 'F'
+const COMMAND_RESPONSE_SUCCESS = 'S'
 
 export default class Server {
   constructor ({port, WsServer, services, logger}) {
@@ -8,6 +15,12 @@ export default class Server {
     this._logger = logger
 
     this._socketSeq = 0
+
+    this._handshake = Buffer.alloc(4)
+    this._handshake.writeUInt8('O'.charCodeAt(0), 0)
+    this._handshake.writeUInt8('P'.charCodeAt(0), 1)
+    this._handshake.writeUInt8(2, 2)
+    this._handshake.writeUInt8(0, 3)
   }
 
   async start () {
@@ -41,10 +54,64 @@ export default class Server {
   }
 
   _onFirstMessage ({socket, seq}) {
-    return message => {
-      this._logger.info('[%d] [hand] [recv] %s', seq, message)
+    return (message, flags) => {
+      if (!(message instanceof Buffer)) {
+        this._logger.error(
+          '[%d] [hand] [err] Invalid handshake: %s',
+          seq,
+          message
+        )
 
-      const handler = this._onMessage({socket, seq})
+        return socket.close()
+      }
+
+      if (message.length < 5) {
+        this._logger.error(
+          '[%d] [hand] [err] Insufficient handshake data.',
+          seq
+        )
+
+        return socket.close()
+      }
+
+      const prefix = message.toString('ascii', 0, 2)
+
+      if (prefix !== 'OP') {
+        this._logger.error(
+          '[%d] [hand] [err] Unexpected handshake prefix: %j.',
+          seq,
+          prefix
+        )
+
+        return socket.close()
+      }
+
+      if (message.readUInt8(2) !== 2 || message.readUInt8(3) !== 0) {
+        this._logger.error(
+          '[%d] [hand] [err] Unsupported handshake version.',
+          seq
+        )
+
+        return socket.close()
+      }
+
+      const mimeTypeLength = message.readUInt8(4)
+
+      if (message.length < mimeTypeLength + 5) {
+        this._logger.error(
+          '[%d] [hand] [err] Insufficient handshake MIME type data.',
+          seq
+        )
+
+        return socket.close()
+      }
+
+      const decoder = new StringDecoder()
+      const mimeType = decoder.end(message.slice(5))
+
+      this._logger.info('[%d] [hand] [recv] 2.0 %s', seq, mimeType)
+
+      const handler = this._onMessage({socket, seq, mimeType})
 
       socket.on('message', handler)
       socket.once(
@@ -52,13 +119,13 @@ export default class Server {
         () => socket.removeListener('message', handler)
       )
 
-      this._logger.info('[%d] [hand] [send] OP0200', seq)
-      socket.send('OP0200')
+      this._logger.info('[%d] [hand] [send] 2.0', seq)
+      socket.send(this._handshake)
     }
   }
 
-  _onMessage ({socket, seq}) {
-    return message => {
+  _onMessage ({socket, seq, mimeType}) {
+    return (message, flags) => {
       try {
         const request = JSON.parse(message)
 
@@ -93,7 +160,7 @@ export default class Server {
   }
 
   async _dispatch ({socket, seq, request}) {
-    if (request.type !== 'command.request') return
+    if (request.type !== COMMAND_REQUEST) return
 
     const service = this._services[request.namespace]
 
@@ -158,8 +225,7 @@ export default class Server {
         seq,
         request,
         message: {
-          type: 'command.response',
-          responseType: 'success',
+          type: COMMAND_RESPONSE_SUCCESS,
           session: request.session,
           seq: request.seq,
           payload: payload
@@ -195,8 +261,7 @@ export default class Server {
       seq,
       request,
       message: {
-        type: 'command.response',
-        responseType: 'failure',
+        type: COMMAND_RESPONSE_FAILURE,
         session: request.session,
         seq: request.seq,
         payload: {
@@ -231,8 +296,7 @@ export default class Server {
       seq,
       request,
       message: {
-        type: 'command.response',
-        responseType: 'error',
+        type: COMMAND_RESPONSE_ERROR,
         session: request.session,
         seq: request.seq
       }
