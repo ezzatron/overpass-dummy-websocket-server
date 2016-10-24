@@ -1,7 +1,4 @@
 import {
-  SESSION_CREATE,
-  SESSION_DESTROY,
-  COMMAND_REQUEST,
   COMMAND_RESPONSE_SUCCESS,
   COMMAND_RESPONSE_FAILURE,
   COMMAND_RESPONSE_ERROR
@@ -27,13 +24,6 @@ export default class OverpassMessageMarshaller {
     const header = [message.type, message.session]
 
     switch (message.type) {
-      case SESSION_CREATE:
-      case SESSION_DESTROY:
-        return header
-
-      case COMMAND_REQUEST:
-        return this._commandRequestHeader(message, header)
-
       case COMMAND_RESPONSE_SUCCESS:
       case COMMAND_RESPONSE_FAILURE:
       case COMMAND_RESPONSE_ERROR:
@@ -43,13 +33,6 @@ export default class OverpassMessageMarshaller {
     throw new Error(
       'Unsupported message type: ' + message.type + '.'
     )
-  }
-
-  _commandRequestHeader (message, header) {
-    header.push(message.namespace, message.command)
-    if (message.seq) header.push(message.seq)
-
-    return header
   }
 
   _commandResponseHeader (message, header) {

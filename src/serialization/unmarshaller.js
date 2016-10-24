@@ -1,10 +1,7 @@
 import {
   SESSION_CREATE,
   SESSION_DESTROY,
-  COMMAND_REQUEST,
-  COMMAND_RESPONSE_SUCCESS,
-  COMMAND_RESPONSE_FAILURE,
-  COMMAND_RESPONSE_ERROR
+  COMMAND_REQUEST
 } from '../constants'
 
 export default class OverpassMessageUnmarshaller {
@@ -52,11 +49,6 @@ export default class OverpassMessageUnmarshaller {
 
       case COMMAND_REQUEST:
         return this._commandRequestHeader(header, message)
-
-      case COMMAND_RESPONSE_SUCCESS:
-      case COMMAND_RESPONSE_FAILURE:
-      case COMMAND_RESPONSE_ERROR:
-        return this._commandResponseHeader(header, message)
     }
 
     throw new Error(
@@ -83,16 +75,6 @@ export default class OverpassMessageUnmarshaller {
       if (!Number.isInteger(message.seq)) {
         throw new Error('Invalid Overpass message header (seq).')
       }
-    }
-
-    return message
-  }
-
-  _commandResponseHeader (header, message) {
-    message.seq = header[2]
-
-    if (!Number.isInteger(message.seq)) {
-      throw new Error('Invalid Overpass message header (seq).')
     }
 
     return message
