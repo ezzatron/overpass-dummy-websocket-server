@@ -201,8 +201,7 @@ export default class Server {
     const isResponseRequired = !!request.seq
 
     try {
-      const response =
-        await command({respond, isResponseRequired, request: request.payload})
+      const response = await command({respond, isResponseRequired, request})
 
       if (response) respond(response)
     } catch (error) {

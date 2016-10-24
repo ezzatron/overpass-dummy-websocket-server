@@ -13,19 +13,21 @@ export default class EchoService {
   }
 
   success ({request}) {
-    return {echo: request}
+    return {echo: request.payload()}
   }
 
   fail ({request}) {
+    const payload = request.payload()
+
     throw new Failure({
       type: 'echo-failure',
       user: {
         message: 'You done goofed.',
-        data: {request}
+        data: {payload}
       },
       real: {
         message: 'Failure requested by client.',
-        data: {request}
+        data: {payload}
       }
     })
   }
