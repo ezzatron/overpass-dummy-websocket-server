@@ -2,15 +2,18 @@ import {StringDecoder} from 'string_decoder'
 
 import Failure from './failure'
 
-const COMMAND_REQUEST = 'R'
-const COMMAND_RESPONSE_ERROR = 'E'
-const COMMAND_RESPONSE_FAILURE = 'F'
-const COMMAND_RESPONSE_SUCCESS = 'S'
+import {
+  COMMAND_REQUEST,
+  COMMAND_RESPONSE_SUCCESS,
+  COMMAND_RESPONSE_FAILURE,
+  COMMAND_RESPONSE_ERROR
+} from './constants'
 
 export default class Server {
-  constructor ({port, WsServer, services, logger}) {
+  constructor ({port, WsServer, serializations, services, logger}) {
     this._port = port
     this._WsServer = WsServer
+    this._serializations = serializations
     this._services = services
     this._logger = logger
 
@@ -111,7 +114,18 @@ export default class Server {
 
       this._logger.info('[%d] [hand] [recv] 2.0 %s', seq, mimeType)
 
-      const handler = this._onMessage({socket, seq, mimeType})
+      const serialization = this._serializations[mimeType]
+
+      if (!serialization) {
+        this._logger.error(
+          '[%d] [hand] [err] Unsupported MIME type: %j.',
+          mimeType
+        )
+
+        return socket.close()
+      }
+
+      const handler = this._onMessage({socket, seq, serialization})
 
       socket.on('message', handler)
       socket.once(
@@ -124,31 +138,31 @@ export default class Server {
     }
   }
 
-  _onMessage ({socket, seq, mimeType}) {
+  _onMessage ({socket, seq, serialization}) {
     return (message, flags) => {
       try {
-        const request = JSON.parse(message)
+        const request = serialization.unserialize(message)
 
         if (request.seq) {
           this._logger.info(
-            '[%d] [%d] [%d] [recv] %s',
+            '[%d] [%d] [%d] [recv] %j',
             seq,
             request.session,
             request.seq,
-            message
+            request
           )
         } else {
           this._logger.info(
-            '[%d] [%d] [recv] %s',
+            '[%d] [%d] [recv] %j',
             seq,
             request.session,
-            message
+            request
           )
         }
 
-        this._dispatch({socket, seq, request})
+        this._dispatch({socket, seq, request, serialization})
       } catch (e) {
-        this._logger.info('[%d] [recv] %s', seq, message)
+        this._logger.info('[%d] [recv] %j', seq, message)
         this._logger.error(
           '[%d] [err] Invalid message encoding: %s',
           seq,
@@ -159,7 +173,7 @@ export default class Server {
     }
   }
 
-  async _dispatch ({socket, seq, request}) {
+  async _dispatch ({socket, seq, request, serialization}) {
     if (request.type !== COMMAND_REQUEST) return
 
     const service = this._services[request.namespace]
@@ -173,6 +187,7 @@ export default class Server {
         socket,
         seq,
         request,
+        serialization,
         error: new Error(
           "Undefined command '" + request.command +
           "' in namespace '" + request.namespace + "'."
@@ -182,7 +197,7 @@ export default class Server {
       return
     }
 
-    const respond = this._createRespond({socket, seq, request})
+    const respond = this._createRespond({socket, seq, request, serialization})
     const isResponseRequired = !!request.seq
 
     try {
@@ -192,14 +207,20 @@ export default class Server {
       if (response) respond(response)
     } catch (error) {
       if (error instanceof Failure) {
-        this._respondWithFailure({socket, seq, request, failure: error})
+        this._respondWithFailure({
+          socket,
+          seq,
+          request,
+          serialization,
+          failure: error
+        })
       } else {
-        this._respondWithError({socket, seq, request, error})
+        this._respondWithError({socket, seq, request, serialization, error})
       }
     }
   }
 
-  _createRespond ({socket, seq, request}) {
+  _createRespond ({socket, seq, request, serialization}) {
     if (!request.seq) {
       return payload => {
         return this._logger.info(
@@ -224,6 +245,7 @@ export default class Server {
         socket,
         seq,
         request,
+        serialization,
         message: {
           type: COMMAND_RESPONSE_SUCCESS,
           session: request.session,
@@ -234,7 +256,7 @@ export default class Server {
     }
   }
 
-  _respondWithFailure ({socket, seq, request, failure}) {
+  _respondWithFailure ({socket, seq, request, serialization, failure}) {
     if (!request.seq) {
       return this._logger.info(
         '[%d] [%d] [fail] [unsent] [%s] %s',
@@ -260,6 +282,7 @@ export default class Server {
       socket,
       seq,
       request,
+      serialization,
       message: {
         type: COMMAND_RESPONSE_FAILURE,
         session: request.session,
@@ -273,7 +296,7 @@ export default class Server {
     })
   }
 
-  _respondWithError ({socket, seq, request, error}) {
+  _respondWithError ({socket, seq, request, serialization, error}) {
     if (!request.seq) {
       return this._logger.error(
         '[%d] [%d] [erro] [unsent] %s',
@@ -295,6 +318,7 @@ export default class Server {
       socket,
       seq,
       request,
+      serialization,
       message: {
         type: COMMAND_RESPONSE_ERROR,
         session: request.session,
@@ -303,8 +327,8 @@ export default class Server {
     })
   }
 
-  _send ({socket, seq, request, message}) {
-    const data = JSON.stringify(message)
+  _send ({socket, seq, request, serialization, message}) {
+    const data = serialization.serialize(message)
 
     this._logger.debug(
       '[%d] [%d] [%d] [send] %s',
