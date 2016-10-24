@@ -1,7 +1,6 @@
 import * as CBOR from 'cbor-js'
 import * as winston from 'winston'
 import {Server as WsServer} from 'ws'
-import {TextDecoder, TextEncoder} from 'text-encoding'
 
 import EchoService from './service/echo'
 import OverpassCborSerialization from './serialization/cbor'
@@ -39,8 +38,7 @@ const logger = new winston.Logger({
 })
 
 const cborSerialization = new OverpassCborSerialization({CBOR})
-const jsonSerialization =
-  new OverpassJsonSerialization({TextDecoder, TextEncoder})
+const jsonSerialization = new OverpassJsonSerialization()
 
 const cborMessageSerialization = new OverpassMessageSerialization({
   mimeType: 'application/cbor',
