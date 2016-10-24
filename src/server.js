@@ -81,7 +81,7 @@ export default class Server {
 
       if (prefix !== 'OP') {
         this._logger.error(
-          '[%d] [hand] [err] Unexpected handshake prefix: %j.',
+          '[%d] [hand] [err] Unexpected handshake prefix:',
           seq,
           prefix
         )
@@ -118,7 +118,7 @@ export default class Server {
 
       if (!serialization) {
         this._logger.error(
-          '[%d] [hand] [err] Unsupported MIME type: %j.',
+          '[%d] [hand] [err] Unsupported MIME type:',
           mimeType
         )
 
@@ -145,7 +145,7 @@ export default class Server {
 
         if (request.seq) {
           this._logger.info(
-            '[%d] [%d] [%d] [recv] %j',
+            '[%d] [%d] [%d] [recv]',
             seq,
             request.session,
             request.seq,
@@ -153,7 +153,7 @@ export default class Server {
           )
         } else {
           this._logger.info(
-            '[%d] [%d] [recv] %j',
+            '[%d] [%d] [recv]',
             seq,
             request.session,
             request
@@ -162,7 +162,7 @@ export default class Server {
 
         this._dispatch({socket, seq, request, serialization})
       } catch (e) {
-        this._logger.info('[%d] [recv] %j', seq, message)
+        this._logger.info('[%d] [recv]', seq, message)
         this._logger.error(
           '[%d] [err] Invalid message encoding: %s',
           seq,
