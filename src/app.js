@@ -1,13 +1,23 @@
 import * as CBOR from 'cbor-js'
 import * as winston from 'winston'
+import createSerialize from 'overpass-websocket/serialization/create-serialize'
+import createUnserialize from 'overpass-websocket/serialization/create-unserialize'
+import jsonDecode from 'overpass-websocket/serialization/json/decode'
+import jsonEncode from 'overpass-websocket/serialization/json/encode'
+import marshallCommandResponse from 'overpass-websocket/serialization/marshaller/command-response'
+import unmarshallCommandRequest from 'overpass-websocket/serialization/unmarshaller/command-request'
 import {Server as WsServer} from 'ws'
 
+import {
+  SESSION_CREATE,
+  SESSION_DESTROY,
+  COMMAND_REQUEST,
+  COMMAND_RESPONSE_SUCCESS,
+  COMMAND_RESPONSE_FAILURE,
+  COMMAND_RESPONSE_ERROR
+} from 'overpass-websocket/core/message-types'
+
 import EchoService from './service/echo'
-import OverpassCborSerialization from './serialization/cbor'
-import OverpassJsonSerialization from './serialization/json'
-import OverpassMessageMarshaller from './serialization/marshaller'
-import OverpassMessageSerialization from './serialization/message'
-import OverpassMessageUnmarshaller from './serialization/unmarshaller'
 import Server from './server'
 
 if (!process.env.PORT) {
@@ -37,27 +47,25 @@ const logger = new winston.Logger({
   ]
 })
 
-const cborSerialization = new OverpassCborSerialization({CBOR})
-const jsonSerialization = new OverpassJsonSerialization()
+const marshallers = {}
+marshallers[COMMAND_RESPONSE_SUCCESS] = marshallCommandResponse
+marshallers[COMMAND_RESPONSE_FAILURE] = marshallCommandResponse
+marshallers[COMMAND_RESPONSE_ERROR] = marshallCommandResponse
 
-const cborMessageSerialization = new OverpassMessageSerialization({
-  mimeType: 'application/cbor',
-  marshaller: new OverpassMessageMarshaller({serialization: cborSerialization}),
-  unmarshaller: new OverpassMessageUnmarshaller({
-    serialization: cborSerialization
-  })
-})
-const jsonMessageSerialization = new OverpassMessageSerialization({
-  mimeType: 'application/json',
-  marshaller: new OverpassMessageMarshaller({serialization: jsonSerialization}),
-  unmarshaller: new OverpassMessageUnmarshaller({
-    serialization: jsonSerialization
-  })
-})
+const unmarshallers = {}
+unmarshallers[SESSION_CREATE] = null
+unmarshallers[SESSION_DESTROY] = null
+unmarshallers[COMMAND_REQUEST] = unmarshallCommandRequest
 
 const serializations = {
-  'application/cbor': cborMessageSerialization,
-  'application/json': jsonMessageSerialization
+  'application/cbor': {
+    serialize: createSerialize(marshallers, CBOR.encode),
+    unserialize: createUnserialize(unmarshallers, CBOR.decode)
+  },
+  'application/json': {
+    serialize: createSerialize(marshallers, jsonEncode),
+    unserialize: createUnserialize(unmarshallers, jsonDecode)
+  }
 }
 
 const services = {

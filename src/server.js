@@ -1,13 +1,14 @@
 import {StringDecoder} from 'string_decoder'
 
 import Failure from './failure'
+import {toArrayBuffer} from './buffer'
 
 import {
   COMMAND_REQUEST,
   COMMAND_RESPONSE_SUCCESS,
   COMMAND_RESPONSE_FAILURE,
   COMMAND_RESPONSE_ERROR
-} from './constants'
+} from 'overpass-websocket/core/message-types'
 
 export default class Server {
   constructor ({port, WsServer, serializations, services, logger}) {
@@ -141,7 +142,7 @@ export default class Server {
   _onMessage ({socket, seq, serialization}) {
     return (message, flags) => {
       try {
-        const request = serialization.unserialize(message)
+        const request = serialization.unserialize(toArrayBuffer(message))
 
         if (request.seq) {
           this._logger.info(
